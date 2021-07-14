@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
     // Examples for ANGELIA:   ANAN100D
     // Examples for ORION:     ANAN200D
     // Examples for ORION2:    ANAN7000, ANAN8000
-    // Examples for C25:	   RedPitaya based boards with fixed ADC connections
+    // Examples for C25:       RedPitaya based boards with fixed ADC connections
 
     // seed value for random number generator
     seed = ((uintptr_t) &seed) & 0xffffff;
@@ -251,6 +251,25 @@ int main(int argc, char *argv[]) {
         }
         if (!strncmp(argv[i], "-debug", 3)) {
             dbg_setlevel(1);
+        }
+        if (!strncmp(argv[i], "-help", 3) || !strncmp(argv[i], "--help", 3)) {
+            printf("Options:\n"
+                    "    -atlas: \n"
+                    "    -hermes: \n"
+                    "    -griffin: \n"
+                    "    -angelia: \n"
+                    "    -orion: \n"
+                    "    -orion2: \n"
+                    "    -hermeslite: \n"
+                    "    -hermeslite2: \n"
+                    "    -c25: \n"
+                    "    -diversity: \n"
+                    "    -P1: \n"
+                    "    -P2: \n"
+                    "    -debug: \n"
+                    "    -debugtx: \n"
+                    "    -debugrx: \n");
+            exit(0);
         }
     }
 
@@ -487,7 +506,6 @@ int main(int argc, char *argv[]) {
         switch (code) {
         // PC to SDR transmission via process_ep2
         case 0x0201feef:
-
             // processing an invalid packet is too dangerous -- skip it!
             if (bytes_read != 1032) {
                 dbg_printf(1, "InvalidLength: RvcMsg Code=0x%08x Len=%d\n", code, (int) bytes_read);
@@ -520,16 +538,7 @@ int main(int argc, char *argv[]) {
                 bp = buffer + 16;  // skip 8 header and 8 SYNC/C&C bytes
                 sum = 0.0;
                 for (j = 0; j < 126; j++) {
-                    //if (do_audio) {
-                    // write audio samples
-                    //    r = (int) ((signed char) *bp++) << 8;
-                    //    r |= (int) ((signed char) *bp++ & 0xFF);
-                    //    l = (int) ((signed char) *bp++) << 8;
-                    //    l |= (int) ((signed char) *bp++ & 0xFF);
-                    //audio_write(r, l);
-                    //} else {
                     bp += 4;
-                    //}
                     sample = (int) ((signed char) *bp++) << 8;
                     sample |= (int) ((signed char) *bp++ & 0xFF);
                     disample = (double) sample * 0.000030517578125;  // division by 32768
@@ -543,7 +552,7 @@ int main(int argc, char *argv[]) {
                         isample[txptr] = disample;
                         qsample[txptr++] = dqsample;
                         break;
-                    case 1: // RX sample rate = 96000; TX sample rate = 48000
+                    case 1:  // RX sample rate = 96000; TX sample rate = 48000
                         idelta = 0.5 * (disample - last_i_sample);
                         qdelta = 0.5 * (dqsample - last_q_sample);
                         isample[txptr] = last_i_sample + idelta;
@@ -551,7 +560,7 @@ int main(int argc, char *argv[]) {
                         isample[txptr] = disample;
                         qsample[txptr++] = dqsample;
                         break;
-                    case 2: // RX sample rate = 192000; TX sample rate = 48000
+                    case 2:  // RX sample rate = 192000; TX sample rate = 48000
                         idelta = 0.25 * (disample - last_i_sample);
                         qdelta = 0.25 * (dqsample - last_q_sample);
                         isample[txptr] = last_i_sample + idelta;
@@ -563,7 +572,7 @@ int main(int argc, char *argv[]) {
                         isample[txptr] = disample;
                         qsample[txptr++] = dqsample;
                         break;
-                    case 3: // RX sample rate = 384000; TX sample rate = 48000
+                    case 3:  // RX sample rate = 384000; TX sample rate = 48000
                         idelta = 0.125 * (disample - last_i_sample);
                         qdelta = 0.125 * (dqsample - last_q_sample);
                         isample[txptr] = last_i_sample + idelta;
@@ -584,13 +593,12 @@ int main(int argc, char *argv[]) {
                         qsample[txptr++] = dqsample;
                         break;
                     }
-                    //if (do_audio)
-                    //    audio_write(disample, dqsample);
+
                     last_i_sample = disample;
                     last_q_sample = dqsample;
 
                     if (j == 62)
-                        bp += 8; // skip 8 SYNC/C&C bytes of second block
+                        bp += 8;  // skip 8 SYNC/C&C bytes of second block
                 }
                 txlevel = txdrv_dbl * txdrv_dbl * sum * 0.0079365;
                 // wrap-around of ring buffer
@@ -601,7 +609,6 @@ int main(int argc, char *argv[]) {
 
         // respond to an incoming Metis detection request
         case 0x0002feef:
-
             if (oldnew == 2) {
                 dbg_printf(1, "OldProtocol detection request IGNORED.\n");
                 break;  // swallow P1 detection requests
@@ -648,7 +655,6 @@ int main(int argc, char *argv[]) {
 
         // stop the SDR to PC transmission via handler_ep6
         case 0x0004feef:
-
             dbg_printf(1, "STOP the transmission via handler_ep6 / code: 0x%08x\n", code);
 
             // processing an invalid packet is too dangerous -- skip it!
@@ -670,7 +676,6 @@ int main(int argc, char *argv[]) {
         case 0x0104feef:
         case 0x0204feef:
         case 0x0304feef:
-
             if (new_protocol_running()) {
                 dbg_printf(1, "OldProtocol START command received but NewProtocol radio already running!\n");
                 break;
@@ -773,7 +778,7 @@ int main(int argc, char *argv[]) {
                     break;
                 }
                 dbg_printf(1, "NewProtocol discovery packet received\n");
-                // prepeare response
+                // prepare response
                 memset(buffer, 0, 60);
                 buffer[4] = 0x02 + new_protocol_running();
                 buffer[5] = 0xAA;
@@ -927,10 +932,9 @@ int main(int argc, char *argv[]) {
     return EXIT_SUCCESS;
 }
 
-#define chk_data(a,b,c) if ((a) != b) { b = (a); printf("%20s= %08lx (%10ld)\n", c, (long) b, (long) b ); }
+#define chk_data(a,b,c) if ((a) != b) { b = (a); dbg_printf(1, "%20s= %08lx (%10ld)\n", c, (long) b, (long) b ); }
 
 void process_ep2(uint8_t *frame) {
-
     uint16_t data;
     int rc;
     int mod;
@@ -1240,10 +1244,10 @@ void* handler_ep6(void *arg) {
         // This defines the distortion as well as the amplification
         // Use PA settings such that there is full drive at full power (39 dB)
 
-        //  48 kHz   decimation=32
-        //  96 kHz   decimation=16
-        // 192 kHz   decimation= 8
-        // 384 kHz   decimation= 4
+        //  48 kHz   decimation = 32
+        //  96 kHz   decimation = 16
+        // 192 kHz   decimation =  8
+        // 384 kHz   decimation =  4
         decimation = 32 >> rate;
         for (i = 0; i < 2; ++i) {
             pointer = buffer + i * 516 - i % 2 * 4 + 8;
@@ -1270,7 +1274,7 @@ void* handler_ep6(void *arg) {
                     *(pointer + 5) = tx_fifo_count & 0x7F;  // pseudo random number
                 } else {
                     // AIN5: Exciter power
-                    *(pointer + 4) = 0;		// about 500 mW
+                    *(pointer + 4) = 0;  // about 500 mW
                     *(pointer + 5) = txdrive;
                 }
                 // AIN1: Forward Power
@@ -1298,10 +1302,10 @@ void* handler_ep6(void *arg) {
 
             pointer += 8;
             memset(pointer, 0, 504);
-            fac1 = rxatt_dbl[0] * 0.0002239;	// Amplitude of 800-Hz-signal to ADC1
+            fac1 = rxatt_dbl[0] * 0.0002239;  // Amplitude of 800-Hz-signal to ADC1
             if (diversity) {
-                fac2 = 0.0001 * rxatt_dbl[0];	// Amplitude of broad "man-made" noise to ADC1
-                fac4 = 0.0002 * rxatt_dbl[1];	// Amplitude of broad "man-made" noise to ADC2
+                fac2 = 0.0001 * rxatt_dbl[0];  // Amplitude of broad "man-made" noise to ADC1
+                fac4 = 0.0002 * rxatt_dbl[1];  // Amplitude of broad "man-made" noise to ADC2
                 // (phase shifted 90 deg., 6 dB stronger)
             }
             for (j = 0; j < n; j++) {
@@ -1329,10 +1333,10 @@ void* handler_ep6(void *arg) {
                     adc2qsample = (txatt_dbl * q1 * fac3 + noiseItab[noiseIQpt]) * 8388607.0;
                 } else if (diversity) {
                     // man made noise to Q channel only
-                    adc2isample = noiseItab[noiseIQpt] * 8388607.0;		// Noise
+                    adc2isample = noiseItab[noiseIQpt] * 8388607.0;  // Noise
                     adc2qsample = (noiseQtab[noiseIQpt] + divtab[divpt] * fac4) * 8388607.0;
                 } else {
-                    adc2isample = noiseItab[noiseIQpt] * 8388607.0;			// Noise
+                    adc2isample = noiseItab[noiseIQpt] * 8388607.0;  // Noise
                     adc2qsample = noiseQtab[noiseIQpt] * 8388607.0;
                 }
 
@@ -1427,5 +1431,3 @@ void* handler_ep6(void *arg) {
 void data_print(char* prfx, double l, double r) {
     printf("%s[%f,%f]_", prfx, l , r);
 }
-
-

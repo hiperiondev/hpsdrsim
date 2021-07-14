@@ -53,7 +53,7 @@ static int adcmap[NUMRECEIVERS];
 static int rxrate[NUMRECEIVERS];
 static int syncddc[NUMRECEIVERS];
 
-//data from tx specific packet
+// data from tx specific packet
 static int dac = 0;
 static int cwmode = 0;
 static int sidelevel = 0;
@@ -68,7 +68,7 @@ static int orion = 0;
 static int gain = 0;
 static int txatt = 0;
 
-//stat from high-priority packet
+// stat from high-priority packet
 static int run = 0;
 static int ptt = 0;
 static int cwx = 0;
@@ -752,7 +752,6 @@ void* rx_thread(void *data) {
     unsigned char buffer[1444];
     int yes = 1;
     int i;
-    //unsigned long time;
     long wait;
     double i0sample, q0sample;
     double i1sample, q1sample;
@@ -1103,8 +1102,8 @@ void* send_highprio_thread(void *data) {
         *p++ = (seqnum >> 16) & 0xFF;
         *p++ = (seqnum >> 8) & 0xFF;
         *p++ = (seqnum >> 0) & 0xFF;
-        *p++ = 0;    // no PTT and CW attached
-        *p++ = 0;    // no ADC overload
+        *p++ = 0;  // no PTT and CW attached
+        *p++ = 0;  // no ADC overload
         *p++ = 0;
         *p++ = txdrive;
 
@@ -1114,14 +1113,14 @@ void* send_highprio_thread(void *data) {
         *p++ = (rc >> 8) & 0xFF;
         *p++ = (rc) & 0xFF;
 
-        buffer[49] = 63;   // about 13 volts supply
+        buffer[49] = 63;  // about 13 volts supply
 
         if (sendto(sock, buffer, 60, 0, (struct sockaddr*) &addr_new, sizeof(addr_new)) < 0) {
             dbg_printf(1, "***** ERROR: HP send thread sendto");
             break;
         }
         seqnum++;
-        usleep(50000); // wait 50 msec then send again
+        usleep(50000);  // wait 50 msec then send again
     }
     close(sock);
     return NULL;
