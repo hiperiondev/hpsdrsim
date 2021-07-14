@@ -68,6 +68,8 @@
 #define EXTERN
 #include "hpsdrsim.h"
 #include "debug.h"
+#include "functions.h"
+#include "definitions.h"
 
 // These variables store the state of the "old protocol" SDR.
 // When every they are changed, this is reported.
@@ -501,7 +503,7 @@ int main(int argc, char *argv[]) {
             continue;
         memcpy(&code, buffer, 4);
 
-        dbg_printf(1, "-- code received: %04x (%d)\n", code, code);
+        dbg_printf(2, "-- code received: %04x (%d)\n", code, code);
 
         switch (code) {
         // PC to SDR transmission via process_ep2
@@ -727,17 +729,9 @@ int main(int argc, char *argv[]) {
                 static long cnt = 0;
                 unsigned long blks = (buffer[4] << 24) + (buffer[5] << 16) + (buffer[6] << 8) + buffer[7];
                 dbg_printf(1, "OldProtocol Program blks=%lu count=%ld\r", blks, ++cnt);
-                usleep(1000);
-                memset(buffer, 0, 60);
-                buffer[0] = 0xEF;
-                buffer[1] = 0xFE;
-                buffer[2] = 0x04;
-                buffer[3] = 0xAA;
-                buffer[4] = 0xBB;
-                buffer[5] = 0xCC;
-                buffer[6] = 0xDD;
-                buffer[7] = 0xEE;
-                buffer[8] = 0xFF;
+
+                op_program(buffer);
+
                 sendto(sock_udp, buffer, 60, 0, (struct sockaddr*) &addr_from, sizeof(addr_from));
                 if (blks == cnt)
                     dbg_printf(1, "\n\n Programming Done!\n");
@@ -746,17 +740,9 @@ int main(int argc, char *argv[]) {
 
             if (bytes_read == 64 && buffer[0] == 0xEF && buffer[1] == 0xFE && buffer[2] == 0x03 && buffer[3] == 0x02) {
                 dbg_printf(1, "OldProtocol Erase packet received:\n");
-                sleep(1);
-                memset(buffer, 0, 60);
-                buffer[0] = 0xEF;
-                buffer[1] = 0xFE;
-                buffer[2] = 0x03;
-                buffer[3] = 0xAA;
-                buffer[4] = 0xBB;
-                buffer[5] = 0xCC;
-                buffer[6] = 0xDD;
-                buffer[7] = 0xEE;
-                buffer[8] = 0xFF;
+
+                op_erase_packet(buffer);
+
                 sendto(sock_udp, buffer, 60, 0, (struct sockaddr*) &addr_from, sizeof(addr_from));
                 break;
 
@@ -766,8 +752,9 @@ int main(int argc, char *argv[]) {
                 dbg_printf(1, "OldProtocol SetIP packet received:\n");
                 dbg_printf(1, "MAC address is %02x:%02x:%02x:%02x:%02x:%02x\n", buffer[3], buffer[4], buffer[5], buffer[6], buffer[7], buffer[8]);
                 dbg_printf(1, "IP  address is %03d:%03d:%03d:%03d\n", buffer[9], buffer[10], buffer[11], buffer[12]);
-                buffer[2] = 0x02;
-                memset(buffer + 9, 0, 54);
+
+                op_set_ip(buffer);
+
                 sendto(sock_udp, buffer, 63, 0, (struct sockaddr*) &addr_from, sizeof(addr_from));
                 break;
             }
@@ -778,25 +765,9 @@ int main(int argc, char *argv[]) {
                     break;
                 }
                 dbg_printf(1, "NewProtocol discovery packet received\n");
-                // prepare response
-                memset(buffer, 0, 60);
-                buffer[4] = 0x02 + new_protocol_running();
-                buffer[5] = 0xAA;
-                buffer[6] = 0xBB;
-                buffer[7] = 0xCC;
-                buffer[8] = 0xDD;
-                buffer[9] = 0xEE;
-                buffer[10] = 0xFF;
-                buffer[11] = NEWDEVICE;
-                buffer[12] = 38;
-                buffer[13] = 19;
-                buffer[20] = 2;
-                buffer[21] = 1;
-                buffer[22] = 3;
-                // HERMES_LITE2 is a HermesLite with a new software version
-                if (NEWDEVICE == NEW_DEVICE_HERMES_LITE2) {
-                    buffer[11] = NEW_DEVICE_HERMES_LITE;
-                }
+
+                np_discovery(buffer, new_protocol_running(), NEWDEVICE);
+
                 sendto(sock_udp, buffer, 60, 0, (struct sockaddr*) &addr_from, sizeof(addr_from));
                 break;
             }
@@ -807,20 +778,9 @@ int main(int argc, char *argv[]) {
                     break;
                 }
                 dbg_printf(1, "NewProtocol erase packet received\n");
-                memset(buffer, 0, 60);
-                buffer[4] = 0x02 + active_thread;
-                buffer[5] = 0xAA;
-                buffer[6] = 0xBB;
-                buffer[7] = 0xCC;
-                buffer[8] = 0xDD;
-                buffer[9] = 0xEE;
-                buffer[10] = 0xFF;
-                buffer[11] = NEWDEVICE;
-                buffer[12] = 38;
-                buffer[13] = 103;
-                buffer[20] = 2;
-                buffer[21] = 1;
-                buffer[22] = 3;
+
+                np_erase_packet(buffer, active_thread, NEWDEVICE);
+
                 sendto(sock_udp, buffer, 60, 0, (struct sockaddr*) &addr_from, sizeof(addr_from));
                 sleep(5); // pretend erase takes 5 seconds
                 sendto(sock_udp, buffer, 60, 0, (struct sockaddr*) &addr_from, sizeof(addr_from));
@@ -840,18 +800,9 @@ int main(int argc, char *argv[]) {
                     checksum = 0;
                 for (j = 9; j <= 264; j++)
                     checksum += buffer[j];
-                memset(buffer + 4, 0, 56); // keep seq. no
-                buffer[4] = 0x04;
-                buffer[5] = 0xAA;
-                buffer[6] = 0xBB;
-                buffer[7] = 0xCC;
-                buffer[8] = 0xDD;
-                buffer[9] = 0xEE;
-                buffer[10] = 0xFF;
-                buffer[11] = 103;
-                buffer[12] = NEWDEVICE;
-                buffer[13] = (checksum >> 8) & 0xFF;
-                buffer[14] = (checksum) & 0xFF;
+
+                np_program(buffer, checksum, NEWDEVICE);
+
                 sendto(sock_udp, buffer, 60, 0, (struct sockaddr*) &addr_from, sizeof(addr_from));
                 if (seq + 1 == blk)
                     dbg_printf(1, "\n\nProgramming Done!\n");
@@ -865,6 +816,7 @@ int main(int argc, char *argv[]) {
                 }
                 dbg_printf(1, "NewProtocol SetIP packet received for MAC %2x:%2x:%2x:%2x%2x:%2x IP=%d:%d:%d:%d\n", buffer[5], buffer[6], buffer[7], buffer[8],
                         buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14]);
+
                 // only respond if this is for OUR device
                 if (buffer[5] != 0xAA)
                     break;
@@ -878,20 +830,9 @@ int main(int argc, char *argv[]) {
                     break;
                 if (buffer[10] != 0xFF)
                     break;
-                memset(buffer, 0, 60);
-                buffer[4] = 0x02 + active_thread;
-                buffer[5] = 0xAA;
-                buffer[6] = 0xBB;
-                buffer[7] = 0xCC;
-                buffer[8] = 0xDD;
-                buffer[9] = 0xEE;
-                buffer[10] = 0xFF;
-                buffer[11] = NEWDEVICE;
-                buffer[12] = 38;
-                buffer[13] = 103;
-                buffer[20] = 2;
-                buffer[21] = 1;
-                buffer[22] = 3;
+
+                np_set_ip(buffer, active_thread, NEWDEVICE);
+
                 sendto(sock_udp, buffer, 60, 0, (struct sockaddr*) &addr_from, sizeof(addr_from));
                 break;
             }
@@ -932,29 +873,29 @@ int main(int argc, char *argv[]) {
     return EXIT_SUCCESS;
 }
 
-#define chk_data(a,b,c) if ((a) != b) { b = (a); dbg_printf(1, "%20s= %08lx (%10ld)\n", c, (long) b, (long) b ); }
+#define chk_data(a,b,c,FUNCTION) if ((a) != b) { b = (a); dbg_printf(1, "%20s= %08lx (%10ld)\n", c, (long) b, (long) b ); FUNCTION(frame);}
 
 void process_ep2(uint8_t *frame) {
     uint16_t data;
     int rc;
     int mod;
 
-    chk_data(frame[0] & 1, ptt, "PTT");
+    chk_data(frame[0] & 1, ptt, "PTT", ep2_ptt);
     switch (frame[0]) {
     case 0:
     case 1:
-        chk_data((frame[1] & 0x03) >> 0, rate, "SampleRate");
-        chk_data((frame[1] & 0x0C) >> 3, ref10, "Ref10MHz");
-        chk_data((frame[1] & 0x10) >> 4, src122, "Source122MHz");
-        chk_data((frame[1] & 0x60) >> 5, PMconfig, "Penelope/Mercury config");
-        chk_data((frame[1] & 0x80) >> 7, MicSrc, "MicSource");
+        chk_data((frame[1] & 0x03) >> 0, rate, "SampleRate", ep2_samplerate);
+        chk_data((frame[1] & 0x0C) >> 3, ref10, "Ref10MHz", ep2_ref10mhz);
+        chk_data((frame[1] & 0x10) >> 4, src122, "Source122MHz", ep2_src122mhz);
+        chk_data((frame[1] & 0x60) >> 5, PMconfig, "Penelope/Mercury config", ep2_pm_config);
+        chk_data((frame[1] & 0x80) >> 7, MicSrc, "MicSource", ep2_micsrc);
 
-        chk_data(frame[2] & 1, TX_class_E, "TX CLASS-E");
-        chk_data((frame[2] & 0xfe) >> 1, OpenCollectorOutputs, "OpenCollector");
+        chk_data(frame[2] & 1, TX_class_E, "TX CLASS-E", ep2_txclasse);
+        chk_data((frame[2] & 0xfe) >> 1, OpenCollectorOutputs, "OpenCollector", ep2_opencollector);
 
-        chk_data(((frame[4] >> 3) & 7) + 1, receivers, "RECEIVERS");
-        chk_data(((frame[4] >> 6) & 1), MicTS, "TimeStampMic");
-        chk_data(((frame[4] >> 7) & 1), CommonMercuryFreq, "Common Mercury Freq");
+        chk_data(((frame[4] >> 3) & 7) + 1, receivers, "RECEIVERS", ep2_receivers);
+        chk_data(((frame[4] >> 6) & 1), MicTS, "TimeStampMic", ep2_timestampmic);
+        chk_data(((frame[4] >> 7) & 1), CommonMercuryFreq, "Common Mercury Freq", ep2_commonmercuryfreq);
 
         mod = 0;
         rc = frame[3] & 0x03;
@@ -1019,76 +960,76 @@ void process_ep2(uint8_t *frame) {
 
     case 2:
     case 3:
-        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), tx_freq, "TX FREQ");
+        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), tx_freq, "TX FREQ", ep2_txfreq);
         break;
 
     case 4:
     case 5:
-        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[0], "RX FREQ1");
+        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[0], "RX FREQ1", ep2_rxfreq1);
         break;
 
     case 6:
     case 7:
-        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[1], "RX FREQ2");
+        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[1], "RX FREQ2", ep2_rxfreq2);
         break;
 
     case 8:
     case 9:
-        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[2], "RX FREQ3");
+        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[2], "RX FREQ3", ep2_rxfreq3);
         break;
 
     case 10:
     case 11:
-        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[3], "RX FREQ4");
+        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[3], "RX FREQ4", ep2_rxfreq4);
         break;
 
     case 12:
     case 13:
-        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[4], "RX FREQ5");
+        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[4], "RX FREQ5", ep2_rxfreq5);
         break;
 
     case 14:
     case 15:
-        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[5], "RX FREQ6");
+        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[5], "RX FREQ6", ep2_rxfreq6);
         break;
 
     case 16:
     case 17:
-        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[6], "RX FREQ7");
+        chk_data(frame[4] | (frame[3] << 8) | (frame[2] << 16) | (frame[1] << 24), rx_freq[6], "RX FREQ7", ep2_rxfreq7);
         break;
 
     case 18:
     case 19:
-        chk_data(frame[1], txdrive, "TX DRIVE");
-        chk_data(frame[2] & 0x3F, hermes_config, "HERMES CONFIG");
-        chk_data((frame[2] >> 6) & 0x01, alex_manual, "ALEX manual HPF/LPF");
-        chk_data((frame[2] >> 7) & 0x01, vna, "VNA mode");
-        chk_data(frame[3] & 0x1F, alex_hpf, "ALEX HPF");
-        chk_data((frame[3] >> 5) & 0x01, alex_bypass, "ALEX Bypass HPFs");
-        chk_data((frame[3] >> 6) & 0x01, lna6m, "ALEX 6m LNA");
-        chk_data((frame[3] >> 7) & 0x01, alexTRdisable, "ALEX T/R disable");
-        chk_data(frame[4], alex_lpf, "ALEX LPF");
+        chk_data(frame[1], txdrive, "TX DRIVE", ep2_txdrive);
+        chk_data(frame[2] & 0x3F, hermes_config, "HERMES CONFIG", ep2_hermesconfig);
+        chk_data((frame[2] >> 6) & 0x01, alex_manual, "ALEX manual HPF/LPF", ep2_alexmanhpflpf);
+        chk_data((frame[2] >> 7) & 0x01, vna, "VNA mode", ep2_vnamode);
+        chk_data(frame[3] & 0x1F, alex_hpf, "ALEX HPF", ep2_alexhpf);
+        chk_data((frame[3] >> 5) & 0x01, alex_bypass, "ALEX Bypass HPFs", ep2_alexbyphpfs);
+        chk_data((frame[3] >> 6) & 0x01, lna6m, "ALEX 6m LNA", ep2_alex6mlna);
+        chk_data((frame[3] >> 7) & 0x01, alexTRdisable, "ALEX T/R disable", ep2_alextrdis);
+        chk_data(frame[4], alex_lpf, "ALEX LPF", ep2_alexlpf);
         // reset TX level. Leve a little head-room for noise
         txdrv_dbl = (double) txdrive * 0.00390625;  // div. by. 256
         break;
 
     case 20:
     case 21:
-        chk_data((frame[1] & 0x01) >> 0, rx_preamp[0], "ADC1 preamp");
-        chk_data((frame[1] & 0x02) >> 1, rx_preamp[1], "ADC2 preamp");
-        chk_data((frame[1] & 0x04) >> 2, rx_preamp[2], "ADC3 preamp");
-        chk_data((frame[1] & 0x08) >> 3, rx_preamp[3], "ADC4 preamp");
-        chk_data((frame[1] & 0x10) >> 4, tip_ring, "TIP/Ring");
-        chk_data((frame[1] & 0x20) >> 5, MicBias, "MicBias");
-        chk_data((frame[1] & 0x40) >> 6, MicPTT, "MicPTT");
+        chk_data((frame[1] & 0x01) >> 0, rx_preamp[0], "ADC1 preamp", ep2_adc1preamp);
+        chk_data((frame[1] & 0x02) >> 1, rx_preamp[1], "ADC2 preamp", ep2_adc2preamp);
+        chk_data((frame[1] & 0x04) >> 2, rx_preamp[2], "ADC3 preamp", ep2_adc3preamp);
+        chk_data((frame[1] & 0x08) >> 3, rx_preamp[3], "ADC4 preamp", ep2_adc4preamp);
+        chk_data((frame[1] & 0x10) >> 4, tip_ring, "TIP/Ring", ep2_tipring);
+        chk_data((frame[1] & 0x20) >> 5, MicBias, "MicBias", ep2_micbias);
+        chk_data((frame[1] & 0x40) >> 6, MicPTT, "MicPTT", ep2_micptt);
 
-        chk_data((frame[2] & 0x1F) >> 0, LineGain, "LineGain");
-        chk_data((frame[2] & 0x20) >> 5, MerTxATT0, "Mercury Att on TX/0");
-        chk_data((frame[2] & 0x40) >> 6, PureSignal, "PureSignal");
-        chk_data((frame[2] & 0x80) >> 7, PeneSel, "PenelopeSelect");
+        chk_data((frame[2] & 0x1F) >> 0, LineGain, "LineGain", ep2_linegain);
+        chk_data((frame[2] & 0x20) >> 5, MerTxATT0, "Mercury Att on TX/0", ep2_mercuryattontx0);
+        chk_data((frame[2] & 0x40) >> 6, PureSignal, "PureSignal", ep2_puresignal);
+        chk_data((frame[2] & 0x80) >> 7, PeneSel, "PenelopeSelect", ep2_penelopeselect);
 
-        chk_data((frame[3] & 0x0F) >> 0, MetisDB9, "MetisDB9");
-        chk_data((frame[3] & 0x10) >> 4, MerTxATT1, "Mercury Att on TX/1");
+        chk_data((frame[3] & 0x0F) >> 0, MetisDB9, "MetisDB9", ep2_metisdb9);
+        chk_data((frame[3] & 0x10) >> 4, MerTxATT1, "Mercury Att on TX/1", ep2_mercuryattontx1);
 
         if (frame[4] & 0x40) {
             // Some firmware/emulators use bit6 to indicate a 6-bit format
@@ -1097,10 +1038,10 @@ void process_ep2(uint8_t *frame) {
             // to an RX gain of -12 to +48 dB. However, we set here that
             // a value of +16 (that is, 28 on the 0-60 scale) corresponds to
             // "zero attenuation"
-            chk_data(37 - (frame[4] & 0x3F), rx_att[0], "RX1 HL ATT/GAIN");
+            chk_data(37 - (frame[4] & 0x3F), rx_att[0], "RX1 HL ATT/GAIN", ep2_rx1hlattgain);
         } else {
-            chk_data((frame[4] & 0x1F) >> 0, rx_att[0], "RX1 ATT");
-            chk_data((frame[4] & 0x20) >> 5, rx1_attE, "RX1 ATT enable");
+            chk_data((frame[4] & 0x1F) >> 0, rx_att[0], "RX1 ATT", ep2_rx1att);
+            chk_data((frame[4] & 0x20) >> 5, rx1_attE, "RX1 ATT enable", ep2_rx1attenable);
             //
             // Some hardware emulates "switching off ATT and preamp" by setting ATT
             // to 20 dB, because the preamp cannot be switched.
@@ -1117,12 +1058,12 @@ void process_ep2(uint8_t *frame) {
 
     case 22:
     case 23:
-        chk_data(frame[1] & 0x1f, rx_att[1], "RX2 ATT");
-        chk_data((frame[2] >> 6) & 1, cw_reversed, "CW REV");
-        chk_data(frame[3] & 63, cw_speed, "CW SPEED");
-        chk_data((frame[3] >> 6) & 3, cw_mode, "CW MODE");
-        chk_data(frame[4] & 127, cw_weight, "CW WEIGHT");
-        chk_data((frame[4] >> 7) & 1, cw_spacing, "CW SPACING");
+        chk_data(frame[1] & 0x1f, rx_att[1], "RX2 ATT", ep2_rx2att);
+        chk_data((frame[2] >> 6) & 1, cw_reversed, "CW REV", ep2_cwrev);
+        chk_data(frame[3] & 63, cw_speed, "CW SPEED", ep2_cwspeed);
+        chk_data((frame[3] >> 6) & 3, cw_mode, "CW MODE", ep2_cw_mode);
+        chk_data(frame[4] & 127, cw_weight, "CW WEIGHT", ep2_cwweight);
+        chk_data((frame[4] >> 7) & 1, cw_spacing, "CW SPACING", ep2_cwspacing);
 
         // Set RX amplification factors.
         rxatt_dbl[1] = pow(10.0, -0.05 * (rx_att[1]));
@@ -1132,19 +1073,19 @@ void process_ep2(uint8_t *frame) {
     case 25:
         data = frame[1];
         data |= frame[2] << 8;
-        chk_data((frame[2] << 8) | frame[1], c25_ext_board_i2c_data, "C25 EXT BOARD DATA");
+        chk_data((frame[2] << 8) | frame[1], c25_ext_board_i2c_data, "C25 EXT BOARD DATA", ep2_c25extboarddata);
         break;
 
     case 28:
     case 29:
-        chk_data((frame[1] & 0x03) >> 0, rx_adc[0], "RX1 ADC");
-        chk_data((frame[1] & 0x0C) >> 2, rx_adc[1], "RX2 ADC");
-        chk_data((frame[1] & 0x30) >> 4, rx_adc[2], "RX3 ADC");
-        chk_data((frame[1] & 0xC0) >> 6, rx_adc[3], "RX4 ADC");
-        chk_data((frame[2] & 0x03) >> 0, rx_adc[4], "RX5 ADC");
-        chk_data((frame[2] & 0x0C) >> 2, rx_adc[5], "RX6 ADC");
-        chk_data((frame[2] & 0x30) >> 4, rx_adc[6], "RX7 ADC");
-        chk_data((frame[3] & 0x1f), txatt, "TX ATT");
+        chk_data((frame[1] & 0x03) >> 0, rx_adc[0], "RX1 ADC", ep2_rx1adc);
+        chk_data((frame[1] & 0x0C) >> 2, rx_adc[1], "RX2 ADC", ep2_rx2adc);
+        chk_data((frame[1] & 0x30) >> 4, rx_adc[2], "RX3 ADC", ep2_rx3adc);
+        chk_data((frame[1] & 0xC0) >> 6, rx_adc[3], "RX4 ADC", ep2_rx4adc);
+        chk_data((frame[2] & 0x03) >> 0, rx_adc[4], "RX5 ADC", ep2_rx5adc);
+        chk_data((frame[2] & 0x0C) >> 2, rx_adc[5], "RX6 ADC", ep2_rx6adc);
+        chk_data((frame[2] & 0x30) >> 4, rx_adc[6], "RX7 ADC", ep2_rx7adc);
+        chk_data((frame[3] & 0x1f), txatt, "TX ATT", ep2_txatt);
         txatt_dbl = pow(10.0, -0.05 * (double) txatt);
         if (OLDDEVICE == DEVICE_C25) {
             // RedPitaya: Hard-wired ADC settings.
@@ -1156,16 +1097,16 @@ void process_ep2(uint8_t *frame) {
 
     case 30:
     case 31:
-        chk_data(frame[1] & 1, cw_internal, "CW INT");
-        chk_data(frame[2], sidetone_volume, "SIDE TONE VOLUME");
-        chk_data(frame[3], cw_delay, "CW DELAY");
+        chk_data(frame[1] & 1, cw_internal, "CW INT", ep2_cwint);
+        chk_data(frame[2], sidetone_volume, "SIDE TONE VOLUME", ep2_sidetonevolume);
+        chk_data(frame[3], cw_delay, "CW DELAY", ep2_cwdelay);
         cw_delay = frame[3];
         break;
 
     case 32:
     case 33:
-        chk_data((frame[1] << 2) | (frame[2] & 3), cw_hang, "CW HANG");
-        chk_data((frame[3] << 4) | (frame[4] & 255), freq, "SIDE TONE FREQ");
+        chk_data((frame[1] << 2) | (frame[2] & 3), cw_hang, "CW HANG", ep2_cwhang);
+        chk_data((frame[3] << 4) | (frame[4] & 255), freq, "SIDE TONE FREQ", ep2_sidetonefreq);
         break;
     }
 }

@@ -13,6 +13,7 @@
 #define EXTERN extern
 #include "hpsdrsim.h"
 #include "debug.h"
+#include "definitions.h"
 
 #define NUMRECEIVERS 4
 
