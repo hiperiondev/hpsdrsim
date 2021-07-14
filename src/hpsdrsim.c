@@ -873,7 +873,7 @@ int main(int argc, char *argv[]) {
     return EXIT_SUCCESS;
 }
 
-#define chk_data(a,b,c,FUNCTION) if ((a) != b) { b = (a); dbg_printf(1, "%20s= %08lx (%10ld)\n", c, (long) b, (long) b ); FUNCTION(frame);}
+#define chk_data(a,b,c,FUNCTION) if ((a) != b) {FUNCTION(frame, &b, a, c);}
 
 void process_ep2(uint8_t *frame) {
     uint16_t data;
