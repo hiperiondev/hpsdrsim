@@ -5,8 +5,9 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
-#include "debug.h"
-#include "definitions.h"
+
+#include "hpsdr_debug.h"
+#include "hpsdr_definitions.h"
 
 // new protocol
 

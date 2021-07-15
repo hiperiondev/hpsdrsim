@@ -1,5 +1,5 @@
-#ifndef FUNCTIONS_H_
-#define FUNCTIONS_H_
+#ifndef HPSDR_FUNCTIONS_H_
+#define HPSDR_FUNCTIONS_H_
 
 // new protocol
 void np_discovery(uint8_t *buffer, int new_protocol_running, int NEWDEVICE);

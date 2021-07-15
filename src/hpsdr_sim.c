@@ -66,10 +66,10 @@
 #include <netinet/tcp.h>
 
 #define EXTERN
-#include "hpsdrsim.h"
-#include "debug.h"
-#include "functions.h"
-#include "definitions.h"
+#include "hpsdr_sim.h"
+#include "hpsdr_debug.h"
+#include "hpsdr_functions.h"
+#include "hpsdr_definitions.h"
 
 // These variables store the state of the "old protocol" SDR.
 // When every they are changed, this is reported.

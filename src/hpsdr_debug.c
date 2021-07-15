@@ -1,5 +1,6 @@
+#include "hpsdr_debug.h"
+
 #include <stdbool.h>
-#include "debug.h"
 
 static int debug_level = 0;
 int debug_id = 1;

@@ -11,9 +11,10 @@
 #include <math.h>
 
 #define EXTERN extern
-#include "hpsdrsim.h"
-#include "debug.h"
-#include "definitions.h"
+#include "hpsdr_sim.h"
+#include "hpsdr_debug.h"
+#include "hpsdr_definitions.h"
+#include "hpsdr_functions.h"
 
 #define NUMRECEIVERS 4
 
@@ -105,6 +106,8 @@ static pthread_t mic_thread_id;
 static pthread_t audio_thread_id;
 static pthread_t highprio_thread_id = 0;
 static pthread_t send_highprio_thread_id;
+static pthread_t tx_hardware_thread_id;
+static pthread_t rx_hardware_thread_id[NUMRECEIVERS];
 
 void* ddc_specific_thread(void*);
 void* duc_specific_thread(void*);
@@ -114,6 +117,8 @@ void* rx_thread(void*);
 void* tx_thread(void*);
 void* mic_thread(void*);
 void* audio_thread(void*);
+void* tx_hardware_thread(void*);
+void* rx_hardware_thread(void*);
 
 static double txlevel;
 
@@ -317,7 +322,7 @@ void* ddc_specific_thread(void *data) {
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        dbg_printf(1, "***** ERROR: RX specific: socket");
+        dbg_printf(1, "***** ERROR: RX specific: socket\n");
         return NULL;
     }
 
@@ -333,7 +338,7 @@ void* ddc_specific_thread(void *data) {
     addr.sin_port = htons(ddc_port);
 
     if (bind(sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        dbg_printf(1, "***** ERROR: RX specific: bind");
+        dbg_printf(1, "***** ERROR: RX specific: bind\n");
         close(sock);
         return NULL;
     }
@@ -342,13 +347,13 @@ void* ddc_specific_thread(void *data) {
     while (run) {
         rc = recvfrom(sock, buffer, 1444, 0, (struct sockaddr*) &addr, &lenaddr);
         if (rc < 0 && errno != EAGAIN) {
-            dbg_printf(1, "***** ERROR: DDC specific thread: recvmsg");
+            dbg_printf(1, "***** ERROR: DDC specific thread: recvmsg\n");
             break;
         }
         if (rc < 0)
             continue;
         if (rc != 1444) {
-            dbg_printf(1, "RXspec: Received DDC specific packet with incorrect length");
+            dbg_printf(1, "RXspec: Received DDC specific packet with incorrect length\n");
             break;
         }
         seqold = seqnum;
@@ -437,7 +442,7 @@ void* duc_specific_thread(void *data) {
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        dbg_printf(1, "***** ERROR: TX specific: socket");
+        dbg_printf(1, "***** ERROR: TX specific: socket\n");
         return NULL;
     }
 
@@ -453,7 +458,7 @@ void* duc_specific_thread(void *data) {
     addr.sin_port = htons(duc_port);
 
     if (bind(sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        dbg_printf(1, "***** ERROR: TXspec: bind");
+        dbg_printf(1, "***** ERROR: TXspec: bind\n");
         close(sock);
         return NULL;
     }
@@ -462,7 +467,7 @@ void* duc_specific_thread(void *data) {
     while (run) {
         rc = recvfrom(sock, buffer, 60, 0, (struct sockaddr*) &addr, &lenaddr);
         if (rc < 0 && errno != EAGAIN) {
-            dbg_printf(1, "***** ERROR: TXspec: recvmsg");
+            dbg_printf(1, "***** ERROR: TXspec: recvmsg\n");
             break;
         }
         if (rc < 0)
@@ -554,7 +559,7 @@ void* highprio_thread(void *data) {
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        dbg_printf(1, "***** ERROR: HP: socket");
+        dbg_printf(1, "***** ERROR: HP: socket\n");
         return NULL;
     }
 
@@ -570,7 +575,7 @@ void* highprio_thread(void *data) {
     addr.sin_port = htons(hp_port);
 
     if (bind(sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        dbg_printf(1, "***** ERROR: HP: bind");
+        dbg_printf(1, "***** ERROR: HP: bind\n");
         close(sock);
         return NULL;
     }
@@ -578,13 +583,13 @@ void* highprio_thread(void *data) {
     while (1) {
         rc = recvfrom(sock, buffer, 1444, 0, (struct sockaddr*) &addr, &lenaddr);
         if (rc < 0 && errno != EAGAIN) {
-            dbg_printf(1, "***** ERROR: HighPrio thread: recvmsg");
+            dbg_printf(1, "***** ERROR: HighPrio thread: recvmsg\n");
             break;
         }
         if (rc < 0)
             continue;
         if (rc != 1444) {
-            dbg_printf(1, "Received HighPrio packet with incorrect length");
+            dbg_printf(1, "Received HighPrio packet with incorrect length\n");
             break;
         }
         seqold = seqnum;
@@ -599,27 +604,33 @@ void* highprio_thread(void *data) {
             // if run=0, wait for threads to complete, otherwise spawn them off
             if (run) {
                 if (pthread_create(&ddc_specific_thread_id, NULL, ddc_specific_thread, NULL) < 0) {
-                    dbg_printf(1, "***** ERROR: Create DDC specific thread");
+                    dbg_printf(1, "***** ERROR: Create DDC specific thread\n");
                 }
                 if (pthread_create(&duc_specific_thread_id, NULL, duc_specific_thread, NULL) < 0) {
-                    dbg_printf(1, "***** ERROR: Create DUC specific thread");
+                    dbg_printf(1, "***** ERROR: Create DUC specific thread\n");
                 }
                 for (i = 0; i < NUMRECEIVERS; i++) {
                     if (pthread_create(&rx_thread_id[i], NULL, rx_thread, (void*) (uintptr_t) i) < 0) {
-                        dbg_printf(1, "***** ERROR: Create RX thread");
+                        dbg_printf(1, "***** ERROR: Create RX thread\n");
+                    }
+                    if (pthread_create(&rx_hardware_thread_id[i], NULL, rx_hardware_thread, (void*) (uintptr_t) i) < 0) {
+                        dbg_printf(1, "***** ERROR: Create RX Hardware thread %d\n", i);
                     }
                 }
                 if (pthread_create(&tx_thread_id, NULL, tx_thread, NULL) < 0) {
-                    dbg_printf(1, "***** ERROR: Create TX thread");
+                    dbg_printf(1, "***** ERROR: Create TX thread\n");
+                }
+                if (pthread_create(&tx_hardware_thread_id, NULL, tx_hardware_thread, NULL) < 0) {
+                    dbg_printf(1, "***** ERROR: Create TX Hardware thread\n");
                 }
                 if (pthread_create(&send_highprio_thread_id, NULL, send_highprio_thread, NULL) < 0) {
-                    dbg_printf(1, "***** ERROR: Create SendHighPrio thread");
+                    dbg_printf(1, "***** ERROR: Create SendHighPrio thread\n");
                 }
                 if (pthread_create(&mic_thread_id, NULL, mic_thread, NULL) < 0) {
-                    dbg_printf(1, "***** ERROR: Create Mic thread");
+                    dbg_printf(1, "***** ERROR: Create Mic thread\n");
                 }
                 if (pthread_create(&audio_thread_id, NULL, audio_thread, NULL) < 0) {
-                    dbg_printf(1, "***** ERROR: Create Audio thread");
+                    dbg_printf(1, "***** ERROR: Create Audio thread\n");
                 }
             } else {
                 pthread_join(ddc_specific_thread_id, NULL);
@@ -777,7 +788,7 @@ void* rx_thread(void *data) {
     if (myddc < 0 || myddc >= NUMRECEIVERS)
         return NULL;
 
-    dbg_printf(1, "-- Start rx_thread port: %d\n", ddc0_port + myddc);
+    dbg_printf(1, "-- Start rx_thread %d port: %d\n", myddc, ddc0_port + myddc);
 
     seqnum = 0;
     // unique seed value for random number generator
@@ -785,7 +796,7 @@ void* rx_thread(void *data) {
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        dbg_printf(1, "***** ERROR: RXthread: socket");
+        dbg_printf(1, "***** ERROR: RXthread: socket\n");
         return NULL;
     }
 
@@ -798,7 +809,7 @@ void* rx_thread(void *data) {
     addr.sin_port = htons(ddc0_port + myddc);
 
     if (bind(sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        dbg_printf(1, "***** ERROR: RXthread: bind");
+        dbg_printf(1, "***** ERROR: RXthread: bind\n");
         close(sock);
         return NULL;
     }
@@ -810,6 +821,7 @@ void* rx_thread(void *data) {
     if (rxptr < 0)
         rxptr += NEWRTXLEN;
     divptr = 0;
+
     while (run) {
         if (ddcenable[myddc] <= 0 || rxrate[myddc] == 0 || rxfreq[myddc] == 0) {
             usleep(5000);
@@ -957,7 +969,7 @@ void* rx_thread(void *data) {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &delay, NULL);
 
         if (sendto(sock, buffer, 1444, 0, (struct sockaddr*) &addr_new, sizeof(addr_new)) < 0) {
-            dbg_printf(1, "***** ERROR: RX thread sendto");
+            dbg_printf(1, "***** ERROR: RX thread sendto\n");
             break;
         }
     }
@@ -984,7 +996,7 @@ void* tx_thread(void *data) {
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        dbg_printf(1, "***** ERROR: TX: socket");
+        dbg_printf(1, "***** ERROR: TX: socket\n");
         return NULL;
     }
 
@@ -1000,22 +1012,23 @@ void* tx_thread(void *data) {
     addr.sin_port = htons(duc0_port);
 
     if (bind(sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        dbg_printf(1, "***** ERROR: TX: bind");
+        dbg_printf(1, "***** ERROR: TX: bind\n");
         close(sock);
         return NULL;
     }
 
     seqnum = 0;
+
     while (run) {
         rc = recvfrom(sock, buffer, 1444, 0, (struct sockaddr*) &addr, &lenaddr);
         if (rc < 0 && errno != EAGAIN) {
-            dbg_printf(1, "***** ERROR: TX thread: recvmsg");
+            dbg_printf(1, "***** ERROR: TX thread: recvmsg\n");
             break;
         }
         if (rc < 0)
             continue;
         if (rc != 1444) {
-            dbg_printf(1, "Received TX packet with incorrect length");
+            dbg_printf(1, "Received TX packet with incorrect length\n");
             break;
         }
         seqold = seqnum;
@@ -1050,7 +1063,6 @@ void* tx_thread(void *data) {
 
             // accumulate TX power
             sum += (di * di + dq * dq);
-            data_print("TX", di, dq);
         }
         txlevel = sum * txdrv_dbl * txdrv_dbl * 0.0041667;
     }
@@ -1072,7 +1084,7 @@ void* send_highprio_thread(void *data) {
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        dbg_printf(1, "***** ERROR: SendHighPrio thread: socket");
+        dbg_printf(1, "***** ERROR: SendHighPrio thread: socket\n");
         return NULL;
     }
 
@@ -1085,7 +1097,7 @@ void* send_highprio_thread(void *data) {
     addr.sin_port = htons(shp_port);
 
     if (bind(sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        dbg_printf(1, "***** ERROR: SendHighPrio thread: bind");
+        dbg_printf(1, "***** ERROR: SendHighPrio thread: bind\n");
         close(sock);
         return NULL;
     }
@@ -1117,7 +1129,7 @@ void* send_highprio_thread(void *data) {
         buffer[49] = 63;  // about 13 volts supply
 
         if (sendto(sock, buffer, 60, 0, (struct sockaddr*) &addr_new, sizeof(addr_new)) < 0) {
-            dbg_printf(1, "***** ERROR: HP send thread sendto");
+            dbg_printf(1, "***** ERROR: HP send thread sendto\n");
             break;
         }
         seqnum++;
@@ -1144,7 +1156,7 @@ void* audio_thread(void *data) {
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        dbg_printf(1, "***** ERROR: Audio: socket");
+        dbg_printf(1, "***** ERROR: Audio: socket\n");
         return NULL;
     }
 
@@ -1160,7 +1172,7 @@ void* audio_thread(void *data) {
     addr.sin_port = htons(audio_port);
 
     if (bind(sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        dbg_printf(1, "***** ERROR: Audio: bind");
+        dbg_printf(1, "***** ERROR: Audio: bind\n");
         close(sock);
         return NULL;
     }
@@ -1169,13 +1181,13 @@ void* audio_thread(void *data) {
     while (run) {
         rc = recvfrom(sock, buffer, 260, 0, (struct sockaddr*) &addr, &lenaddr);
         if (rc < 0 && errno != EAGAIN) {
-            dbg_printf(1, "***** ERROR: Audio thread: recvmsg");
+            dbg_printf(1, "***** ERROR: Audio thread: recvmsg\n");
             break;
         }
         if (rc < 0)
             continue;
         if (rc != 260) {
-            dbg_printf(1, "Received Audio packet with incorrect length");
+            dbg_printf(1, "Received Audio packet with incorrect length\n");
             break;
         }
         seqold = seqnum;
@@ -1208,7 +1220,7 @@ void* mic_thread(void *data) {
 
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        dbg_printf(1, "***** ERROR: Mic thread: socket");
+        dbg_printf(1, "***** ERROR: Mic thread: socket\n");
         return NULL;
     }
 
@@ -1221,7 +1233,7 @@ void* mic_thread(void *data) {
     addr.sin_port = htons(mic_port);
 
     if (bind(sock, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        dbg_printf(1, "***** ERROR: Mic thread: bind");
+        dbg_printf(1, "***** ERROR: Mic thread: bind\n");
         close(sock);
         return NULL;
     }
@@ -1247,10 +1259,31 @@ void* mic_thread(void *data) {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &delay, NULL);
 
         if (sendto(sock, buffer, 132, 0, (struct sockaddr*) &addr_new, sizeof(addr_new)) < 0) {
-            dbg_printf(1, "***** ERROR: Mic thread sendto");
+            dbg_printf(1, "***** ERROR: Mic thread sendto\n");
             break;
         }
     }
     close(sock);
+    return NULL;
+}
+
+void* tx_hardware_thread(void *data) {
+    dbg_printf(1, "-- Start tx_hardware_thread\n");
+
+    while (1) {
+        sleep(1);
+    }
+
+    return NULL;
+}
+
+void* rx_hardware_thread(void *data) {
+    int id = (int) (uintptr_t) data;
+    dbg_printf(1, "-- Start rx_hardware_thread %d\n", id);
+
+    while (1) {
+        sleep(1);
+    }
+
     return NULL;
 }

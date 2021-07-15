@@ -1,5 +1,5 @@
-#ifndef DEBUG_H_
-#define DEBUG_H_
+#ifndef HPSDR_DEBUG_H_
+#define HPSDR_DEBUG_H_
 
 #include <stdio.h>
 #include <stdarg.h>

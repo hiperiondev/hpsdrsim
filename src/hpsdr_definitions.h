@@ -2,8 +2,8 @@
  *
  */
 
-#ifndef DEFINITIONS_H_
-#define DEFINITIONS_H_
+#ifndef HPSDR_DEFINITIONS_H_
+#define HPSDR_DEFINITIONS_H_
 
 // Unfortunately, the code number of the gear
 // differs in old and new protocol
@@ -51,4 +51,4 @@
 #define RX_IQ_TO_HOST_PORT_7 1042
 
 
-#endif /* DEFINITIONS_H_ */
+#endif /* HPSDR_DEFINITIONS_H_ */
