@@ -1368,7 +1368,3 @@ void* handler_ep6(void *arg) {
     active_thread = 0;
     return NULL;
 }
-
-void data_print(char* prfx, double l, double r) {
-    printf("%s[%f,%f]_", prfx, l , r);
-}
